@@ -74,7 +74,8 @@ check_usage() {
 
     # Current session の使用量を抽出
     local session_usage=$(echo "$screen_text" | grep -A2 "Current session" | grep "% used" | head -1)
-    log "Current session: $session_usage"
+    local percent=$(echo "$session_usage" | grep -oP '\d+% used')
+    log "Current session: ${percent:-取得失敗}"
 
     # Current session が 0% used かチェック（10%,20%等に誤反応しないよう厳密に）
     if echo "$session_usage" | grep -qP '(^|\s)0% used'; then
