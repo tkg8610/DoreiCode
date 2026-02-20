@@ -5,106 +5,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DoreiCode Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #1a1a2e;
-            color: #e0e0e0;
-            padding: 20px;
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: { bg: '#0f172a', card: '#1e293b', border: '#334155' },
+                        accent: '#4ecca3'
+                    }
+                }
+            }
         }
-        h1 {
-            text-align: center;
-            margin-bottom: 10px;
-            font-size: 1.5rem;
-        }
-        .subtitle {
-            text-align: center;
-            color: #888;
-            margin-bottom: 30px;
-            font-size: 0.9rem;
-        }
-        .stats {
-            display: flex;
-            gap: 16px;
-            justify-content: center;
-            margin-bottom: 30px;
-            flex-wrap: wrap;
-        }
-        .stat-card {
-            background: #16213e;
-            border-radius: 12px;
-            padding: 16px 24px;
-            text-align: center;
-            min-width: 140px;
-        }
-        .stat-card .value {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #4ecca3;
-        }
-        .stat-card .label {
-            font-size: 0.8rem;
-            color: #888;
-            margin-top: 4px;
-        }
-        .chart-container {
-            background: #16213e;
-            border-radius: 12px;
-            padding: 20px;
-            max-width: 900px;
-            margin: 0 auto 20px;
-        }
-        .controls {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .controls input[type="file"] {
-            background: #4ecca3;
-            color: #1a1a2e;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        .controls small {
-            display: block;
-            color: #888;
-            margin-top: 8px;
-        }
-    </style>
+    </script>
 </head>
-<body>
-    <h1>DoreiCode Dashboard</h1>
-    <p class="subtitle">Claude Code 使用量モニター</p>
+<body class="bg-dark-bg text-gray-200 min-h-screen p-6">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold text-center mb-1">DoreiCode Dashboard</h1>
+        <p class="text-center text-gray-500 text-sm mb-8">Claude Code 使用量モニター</p>
 
-    <div class="controls">
-        <input type="file" id="csvInput" accept=".csv">
-        <small>usage_history.csv を選択してください</small>
-    </div>
+        <div class="text-center mb-8">
+            <label class="inline-block bg-accent text-dark-bg font-bold px-6 py-2 rounded-lg cursor-pointer hover:opacity-90 transition">
+                CSV を読み込む
+                <input type="file" id="csvInput" accept=".csv" class="hidden">
+            </label>
+            <p class="text-gray-500 text-xs mt-2">usage_history.csv を選択してください</p>
+        </div>
 
-    <div class="stats">
-        <div class="stat-card">
-            <div class="value" id="currentUsage">-</div>
-            <div class="label">現在の使用量</div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-dark-card rounded-xl p-4 text-center border border-dark-border">
+                <div class="text-3xl font-bold text-accent" id="currentUsage">-</div>
+                <div class="text-xs text-gray-500 mt-1">現在の使用量</div>
+            </div>
+            <div class="bg-dark-card rounded-xl p-4 text-center border border-dark-border">
+                <div class="text-3xl font-bold text-accent" id="maxUsage">-</div>
+                <div class="text-xs text-gray-500 mt-1">最大使用量</div>
+            </div>
+            <div class="bg-dark-card rounded-xl p-4 text-center border border-dark-border">
+                <div class="text-3xl font-bold text-accent" id="dataPoints">-</div>
+                <div class="text-xs text-gray-500 mt-1">データ数</div>
+            </div>
+            <div class="bg-dark-card rounded-xl p-4 text-center border border-dark-border">
+                <div class="text-3xl font-bold text-accent" id="lastUpdate">-</div>
+                <div class="text-xs text-gray-500 mt-1">最終更新</div>
+            </div>
         </div>
-        <div class="stat-card">
-            <div class="value" id="maxUsage">-</div>
-            <div class="label">最大使用量</div>
-        </div>
-        <div class="stat-card">
-            <div class="value" id="dataPoints">-</div>
-            <div class="label">データ数</div>
-        </div>
-        <div class="stat-card">
-            <div class="value" id="lastUpdate">-</div>
-            <div class="label">最終更新</div>
-        </div>
-    </div>
 
-    <div class="chart-container">
-        <canvas id="usageChart"></canvas>
+        <div class="bg-dark-card rounded-xl p-6 border border-dark-border">
+            <canvas id="usageChart"></canvas>
+        </div>
     </div>
 
     <script>
@@ -134,9 +83,7 @@
             const labels = data.map(d => {
                 const parts = d.timestamp.split(' ');
                 if (parts.length === 2) {
-                    const date = parts[0].slice(5); // MM-DD
-                    const time = parts[1].slice(0, 5); // HH:MM
-                    return date + ' ' + time;
+                    return parts[0].slice(5) + ' ' + parts[1].slice(0, 5);
                 }
                 return d.timestamp;
             });
@@ -165,25 +112,17 @@
                         y: {
                             min: 0,
                             max: 100,
-                            ticks: { color: '#888', callback: v => v + '%' },
-                            grid: { color: '#2a2a4a' }
+                            ticks: { color: '#64748b', callback: v => v + '%' },
+                            grid: { color: '#1e293b' }
                         },
                         x: {
-                            ticks: {
-                                color: '#888',
-                                maxTicksLimit: 12,
-                                maxRotation: 45
-                            },
-                            grid: { color: '#2a2a4a' }
+                            ticks: { color: '#64748b', maxTicksLimit: 12, maxRotation: 45 },
+                            grid: { color: '#1e293b' }
                         }
                     },
                     plugins: {
-                        legend: { labels: { color: '#e0e0e0' } },
-                        tooltip: {
-                            callbacks: {
-                                label: ctx => ctx.parsed.y + '% used'
-                            }
-                        }
+                        legend: { labels: { color: '#e2e8f0' } },
+                        tooltip: { callbacks: { label: ctx => ctx.parsed.y + '% used' } }
                     }
                 }
             });
@@ -193,10 +132,7 @@
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = function(ev) {
-                const data = parseCSV(ev.target.result);
-                updateDashboard(data);
-            };
+            reader.onload = ev => updateDashboard(parseCSV(ev.target.result));
             reader.readAsText(file);
         });
     </script>
