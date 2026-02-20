@@ -24,13 +24,7 @@
         <h1 class="text-2xl font-bold text-center mb-1">DoreiCode Dashboard</h1>
         <p class="text-center text-gray-500 text-sm mb-8">Claude Code 使用量モニター</p>
 
-        <div class="text-center mb-8">
-            <label class="inline-block bg-accent text-dark-bg font-bold px-6 py-2 rounded-lg cursor-pointer hover:opacity-90 transition">
-                CSV を読み込む
-                <input type="file" id="csvInput" accept=".csv" class="hidden">
-            </label>
-            <p class="text-gray-500 text-xs mt-2">usage_history.csv を選択してください</p>
-        </div>
+        <p class="text-center text-gray-500 text-xs mb-8" id="status">データ読み込み中...</p>
 
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <div class="bg-dark-card rounded-xl p-4 text-center border border-dark-border">
@@ -128,13 +122,20 @@
             });
         }
 
-        document.getElementById('csvInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = ev => updateDashboard(parseCSV(ev.target.result));
-            reader.readAsText(file);
-        });
+        async function loadCSV() {
+            try {
+                const res = await fetch('/usage_history.csv?' + Date.now());
+                const text = await res.text();
+                const data = parseCSV(text);
+                updateDashboard(data);
+                document.getElementById('status').textContent = '自動更新: 60秒ごと';
+            } catch (e) {
+                document.getElementById('status').textContent = 'CSV読み込み失敗';
+            }
+        }
+
+        loadCSV();
+        setInterval(loadCSV, 60000);
     </script>
 </body>
 </html>
