@@ -1,13 +1,14 @@
 #!/bin/bash
 # ============================================
 # Claude Code 使用量監視スクリプト
-# 10分ごとにClaude Codeの利用状況をチェックし、
-# 使用量0%（リセット済み）を検知したらDiscord Webhookで通知する
+# 10分ごとに対話中のClaudeセッションに /usage を送り、
+# 使用量0%を検知したらDiscord Webhookで通知する
 # ============================================
 
 # === 設定 ===
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/.env"
+CLAUDE_SESSION="claude-session"  # Claudeが動いてるtmuxセッション名
 CHECK_INTERVAL=600  # 10分 (秒)
 LOG_FILE="$SCRIPT_DIR/monitor.log"
 
@@ -19,35 +20,27 @@ log() {
 
 send_discord_notification() {
     local usage_info="$1"
-    local payload=$(cat <<EOF
-{
-  "content": "ヤッホー😆✨❗\nもう、、寝てるかなぁ❓💦\nオジサン気になっちゃって、、😅\n連絡しちゃったヨ（笑）",
-  "embeds": [{
-    "title": "Claude Code、、使えるようになったヨ❗✨🎉",
-    "description": "いやぁ〜、ビックリだネ😳❗❗\n使用量が、0%に\nリセットされたみたいだヨ✨💕\n\nオジサンずっと、、\n見守ってたんだから〜😅💦\n早速コーディング、しちゃお❓\nナンチャッテ（笑）🏃‍♂️💨\n\nそういえば今日のランチ、、\nイタリアン🍝だったんだけど、、\n今度一緒に、どうかナ❓✨\nナンチャッテ（笑）😅💦",
-    "color": 16738740,
-    "fields": [{
-      "name": "検出時刻だヨ⏰✨",
-      "value": "$(date '+%Y-%m-%d %H:%M:%S')",
-      "inline": true
-    },
-    {
-      "name": "出力内容だネ📋💦",
-      "value": "$(echo "$usage_info" | head -5 | sed 's/"/\\"/g')",
-      "inline": false
-    }],
-    "footer": {
-      "text": "DoreiCode Monitor おじさんより💕"
-    }
-  }]
+    local tmpfile=$(mktemp)
+    python3 -c "
+import json, sys
+payload = {
+    'content': 'ヤッホー😆✨❗\nもう、、寝てるかなぁ❓💦\nオジサン気になっちゃって、、😅\n連絡しちゃったヨ（笑）',
+    'embeds': [{
+        'title': 'Claude Code、、使えるようになったヨ❗✨🎉',
+        'description': 'いやぁ〜、ビックリだネ😳❗❗\n使用量が、0%%に\nリセットされたみたいだヨ✨💕\n\nオジサンずっと、、\n見守ってたんだから〜😅💦\n早速コーディング、しちゃお❓\nナンチャッテ（笑）🏃‍♂️💨\n\nそういえば今日のランチ、、\nイタリアン🍝だったんだけど、、\n今度一緒に、どうかナ❓✨\nナンチャッテ（笑）😅💦',
+        'color': 16738740,
+        'fields': [{'name': '検出時刻だヨ⏰✨', 'value': '$(date '+%Y-%m-%d %H:%M:%S')', 'inline': True}],
+        'footer': {'text': 'DoreiCode Monitor おじさんより💕'}
+    }]
 }
-EOF
-)
+json.dump(payload, open(sys.argv[1], 'w'), ensure_ascii=False)
+" "$tmpfile"
 
     local response=$(curl -s -o /dev/null -w "%{http_code}" \
         -H "Content-Type: application/json" \
-        -d "$payload" \
+        -d @"$tmpfile" \
         "$DISCORD_WEBHOOK_URL")
+    rm -f "$tmpfile"
 
     if [ "$response" = "204" ] || [ "$response" = "200" ]; then
         log "✅ Discord通知送信成功"
@@ -59,20 +52,38 @@ EOF
 check_usage() {
     log "使用量チェック開始..."
 
-    # CLAUDECODE環境変数をクリアして入れ子実行エラーを回避
-    local output=$(unset CLAUDECODE; claude -p "/limit" 2>&1)
-    local exit_code=$?
+    # Claudeセッションが存在するか確認
+    if ! tmux has-session -t "$CLAUDE_SESSION" 2>/dev/null; then
+        log "⚠️ tmuxセッション '$CLAUDE_SESSION' が見つかりません"
+        return 1
+    fi
 
-    log "出力: $output"
+    # /usage コマンドを送信（オートコンプリートが出るのでEnter2回）
+    tmux send-keys -t "$CLAUDE_SESSION" "/usage" C-m
+    sleep 2
+    tmux send-keys -t "$CLAUDE_SESSION" C-m
 
-    # 0% を検出（使用量0% = リセット済み、使える状態）
-    if echo "$output" | grep -q "0%"; then
-        log "🎉 使用量0% 検出！通知を送信します"
-        send_discord_notification "$output"
+    # 出力を待つ
+    sleep 5
+
+    # 画面をキャプチャ
+    local screen_text=$(tmux capture-pane -t "$CLAUDE_SESSION" -p)
+
+    # Escで閉じる
+    tmux send-keys -t "$CLAUDE_SESSION" Escape
+
+    # Current session の使用量を抽出
+    local session_usage=$(echo "$screen_text" | grep -A2 "Current session" | grep "% used" | head -1)
+    log "Current session: $session_usage"
+
+    # Current session が 0% used かチェック（10%,20%等に誤反応しないよう厳密に）
+    if echo "$session_usage" | grep -qP '(^|\s)0% used'; then
+        log "🎉 Current session 0% 検出！通知を送信します"
+        send_discord_notification "$session_usage"
         return 0
     fi
 
-    log "⏳ まだ使用中（0%ではない）"
+    log "⏳ まだ0%ではない"
     return 1
 }
 
@@ -80,6 +91,7 @@ check_usage() {
 
 log "=========================================="
 log "Claude Code 使用量監視を開始します"
+log "監視対象セッション: $CLAUDE_SESSION"
 log "チェック間隔: ${CHECK_INTERVAL}秒 ($(( CHECK_INTERVAL / 60 ))分)"
 log "=========================================="
 
