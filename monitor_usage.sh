@@ -11,6 +11,7 @@ source "$SCRIPT_DIR/.env"
 CLAUDE_SESSION="claude-session"  # Claudeが動いてるtmuxセッション名
 CHECK_INTERVAL=600  # 10分 (秒)
 LOG_FILE="$SCRIPT_DIR/monitor.log"
+CSV_FILE="$SCRIPT_DIR/usage_history.csv"
 
 # === 関数 ===
 
@@ -74,8 +75,15 @@ check_usage() {
 
     # Current session の使用量を抽出
     local session_usage=$(echo "$screen_text" | grep -A2 "Current session" | grep "% used" | head -1)
-    local percent=$(echo "$session_usage" | grep -oP '\d+% used')
-    log "Current session: ${percent:-取得失敗}"
+    local percent=$(echo "$session_usage" | grep -oP '\d+(?=% used)')
+    log "Current session: ${percent:-取得失敗}% used"
+
+    # CSVに記録
+    if [ -n "$percent" ]; then
+        # ヘッダーがなければ作成
+        [ ! -f "$CSV_FILE" ] && echo "timestamp,percent" > "$CSV_FILE"
+        echo "$(date '+%Y-%m-%d %H:%M:%S'),$percent" >> "$CSV_FILE"
+    fi
 
     # Current session が 0% used かチェック（10%,20%等に誤反応しないよう厳密に）
     if echo "$session_usage" | grep -qP '(^|\s)0% used'; then

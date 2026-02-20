@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DoreiCode Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 1.5rem;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 30px;
+            font-size: 0.9rem;
+        }
+        .stats {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 16px 24px;
+            text-align: center;
+            min-width: 140px;
+        }
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4ecca3;
+        }
+        .stat-card .label {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 4px;
+        }
+        .chart-container {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto 20px;
+        }
+        .controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .controls input[type="file"] {
+            background: #4ecca3;
+            color: #1a1a2e;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .controls small {
+            display: block;
+            color: #888;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>DoreiCode Dashboard</h1>
+    <p class="subtitle">Claude Code 使用量モニター</p>
+
+    <div class="controls">
+        <input type="file" id="csvInput" accept=".csv">
+        <small>usage_history.csv を選択してください</small>
+    </div>
+
+    <div class="stats">
+        <div class="stat-card">
+            <div class="value" id="currentUsage">-</div>
+            <div class="label">現在の使用量</div>
+        </div>
+        <div class="stat-card">
+            <div class="value" id="maxUsage">-</div>
+            <div class="label">最大使用量</div>
+        </div>
+        <div class="stat-card">
+            <div class="value" id="dataPoints">-</div>
+            <div class="label">データ数</div>
+        </div>
+        <div class="stat-card">
+            <div class="value" id="lastUpdate">-</div>
+            <div class="label">最終更新</div>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="usageChart"></canvas>
+    </div>
+
+    <script>
+        let chart = null;
+
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            const data = [];
+            for (let i = 1; i < lines.length; i++) {
+                const [timestamp, percent] = lines[i].split(',');
+                if (timestamp && percent !== undefined) {
+                    data.push({ timestamp, percent: parseInt(percent, 10) });
+                }
+            }
+            return data;
+        }
+
+        function updateDashboard(data) {
+            if (data.length === 0) return;
+
+            const current = data[data.length - 1];
+            document.getElementById('currentUsage').textContent = current.percent + '%';
+            document.getElementById('maxUsage').textContent = Math.max(...data.map(d => d.percent)) + '%';
+            document.getElementById('dataPoints').textContent = data.length;
+            document.getElementById('lastUpdate').textContent = current.timestamp.split(' ')[1] || current.timestamp;
+
+            const labels = data.map(d => {
+                const parts = d.timestamp.split(' ');
+                if (parts.length === 2) {
+                    const date = parts[0].slice(5); // MM-DD
+                    const time = parts[1].slice(0, 5); // HH:MM
+                    return date + ' ' + time;
+                }
+                return d.timestamp;
+            });
+            const values = data.map(d => d.percent);
+
+            if (chart) chart.destroy();
+
+            chart = new Chart(document.getElementById('usageChart'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Current Session 使用量 (%)',
+                        data: values,
+                        borderColor: '#4ecca3',
+                        backgroundColor: 'rgba(78, 204, 163, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 2,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 100,
+                            ticks: { color: '#888', callback: v => v + '%' },
+                            grid: { color: '#2a2a4a' }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#888',
+                                maxTicksLimit: 12,
+                                maxRotation: 45
+                            },
+                            grid: { color: '#2a2a4a' }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#e0e0e0' } },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ctx.parsed.y + '% used'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        document.getElementById('csvInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                const data = parseCSV(ev.target.result);
+                updateDashboard(data);
+            };
+            reader.readAsText(file);
+        });
+    </script>
+</body>
+</html>
