@@ -59,12 +59,13 @@ check_usage() {
         return 1
     fi
 
-    # /usage コマンドを送信（オートコンプリートが出るのでEnter2回）
+    # /usage コマンドを送信（オートコンプリート確定のEnter1回のみ）
     tmux send-keys -t "$CLAUDE_SESSION" "/usage" C-m
     sleep 2
+    # オートコンプリート確定
     tmux send-keys -t "$CLAUDE_SESSION" C-m
 
-    # 出力を待つ
+    # ダイアログ表示を待つ
     sleep 5
 
     # 画面をキャプチャ
