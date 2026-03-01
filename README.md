@@ -2,6 +2,8 @@
 
 Claude Code の使用量を自動監視し、Current session の使用量が 0%（リセット済み）になったら Discord におじさん構文で通知するスクリプト。
 
+cron で10分ごとに実行するため、監視用の tmux セッションが不要。
+
 ## セットアップ
 
 ### 1. `.env` を作成
@@ -30,26 +32,37 @@ claude
 # Ctrl+b → d でデタッチ
 ```
 
-### 4. 監視スクリプトを起動
+### 4. cron に登録
 
 ```bash
-tmux new -s claude-monitor
-./monitor_usage.sh
-# Ctrl+b → d でデタッチ
+crontab -e
 ```
 
-### 5. 後で確認・復帰
+以下を追加（パスは環境に合わせて変更）:
+
+```
+*/10 * * * * /home/user/DoreiCode/monitor_usage.sh
+```
+
+### 5. 動作確認
 
 ```bash
-tmux attach -s claude-monitor   # 監視スクリプト
-tmux attach -s claude-session   # Claude対話セッション
-tail -f monitor.log             # ログをリアルタイム確認
+# cron が動いてるか確認
+systemctl status cron
+
+# ログをリアルタイム確認
+tail -f monitor.log
+
+# 手動で1回テスト実行
+./monitor_usage.sh
 ```
 
 ## 仕組み
 
-1. `tmux send-keys` で `claude-session` に `/usage` コマンドを送信
-2. `tmux capture-pane` で画面をキャプチャ
-3. Current session の使用量が `0% used` なら Discord Webhook で通知
-4. 10分ごとに繰り返し
-5. ログは `monitor.log` に記録
+1. cron が10分ごとにスクリプトを起動
+2. `flock` で重複実行を防止
+3. `tmux send-keys` で `claude-session` に `/usage` コマンドを送信
+4. `tmux capture-pane` で画面をキャプチャ
+5. Current session の使用量が `0% used` なら Discord Webhook でおじさん構文通知
+6. スクリプト終了（待機中のメモリ消費ゼロ）
+7. ログは `monitor.log`、使用量推移は `usage_history.csv` に記録

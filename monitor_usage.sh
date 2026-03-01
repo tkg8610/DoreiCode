@@ -1,22 +1,33 @@
 #!/bin/bash
 # ============================================
-# Claude Code 使用量監視スクリプト
-# 10分ごとに対話中のClaudeセッションに /usage を送り、
+# Claude Code 使用量監視スクリプト (cron対応版)
+# cronから10分ごとに呼び出し、
+# 対話中のClaudeセッションに /usage を送り、
 # 使用量0%を検知したらDiscord Webhookで通知する
+#
+# crontab設定例:
+#   */10 * * * * /home/user/DoreiCode/monitor_usage.sh
 # ============================================
 
 # === 設定 ===
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/.env"
 CLAUDE_SESSION="claude-session"  # Claudeが動いてるtmuxセッション名
-CHECK_INTERVAL=600  # 10分 (秒)
 LOG_FILE="$SCRIPT_DIR/monitor.log"
 CSV_FILE="$SCRIPT_DIR/usage_history.csv"
+LOCK_FILE="/tmp/doreicode_monitor.lock"
+
+# === 重複実行防止 (flock) ===
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️ 前回の実行がまだ終わっていません。スキップします" >> "$LOG_FILE"
+    exit 0
+fi
 
 # === 関数 ===
 
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
 send_discord_notification() {
@@ -97,24 +108,12 @@ check_usage() {
     return 1
 }
 
-# === メインループ ===
-
-log "=========================================="
-log "Claude Code 使用量監視を開始します"
-log "監視対象セッション: $CLAUDE_SESSION"
-log "チェック間隔: ${CHECK_INTERVAL}秒 ($(( CHECK_INTERVAL / 60 ))分)"
-log "=========================================="
+# === メイン（1回実行して終了） ===
 
 # Webhook URLのチェック
 if [ "$DISCORD_WEBHOOK_URL" = "YOUR_DISCORD_WEBHOOK_URL_HERE" ]; then
     log "⚠️  Discord Webhook URLが設定されていません！"
-    log "スクリプト内の DISCORD_WEBHOOK_URL を設定してください"
     exit 1
 fi
 
-while true; do
-    check_usage
-
-    log "次のチェックまで ${CHECK_INTERVAL}秒 待機..."
-    sleep "$CHECK_INTERVAL"
-done
+check_usage
